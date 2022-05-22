@@ -1,4 +1,12 @@
-*
+*.zip
+GCN_C1P/*
+GCN_C2P/*
+GCN_N1C/*
+GCN_N2C/*
+GCN_N3C/*
+GCN_N1P/*
+GCN_N2P/*
+*.txt
 !A.npy
-!GCN_N3P/*
+!GCN_N3P/.gitignore
 !.gitignore
