@@ -6,7 +6,7 @@ from torch_geometric.loader import DataLoader
 
 from config import config
 from model import Net, MolDataset
-from utils1 import worker_init_fn
+from utils import worker_init_fn
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  #（保证程序cuda序号与实际cuda序号对应）
 os.environ['CUDA_VISIBLE_DEVICES'] = "3"  #（代表仅使用第0，1号GPU）
@@ -25,7 +25,7 @@ def run():
     print("initial_lr: {0:06f}".format(initial_lr))
     print("random_seed: {}".format(seed))
 
-    Y = np.load(config.main_path + "data1/{0}/{0}_gaps.npy".format(config.dataset))
+    Y = np.load(config.main_path + "data/{0}/{0}_gaps.npy".format(config.dataset))
     #print(Y)
     model = Net(device, seed).to(device)
     model.train()

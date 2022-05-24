@@ -15,7 +15,7 @@ from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.nn import ChebConv, GCNConv  # noqa
 from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 from torch.backends import cudnn
-from utils1 import worker_init_fn
+from utils import worker_init_fn
 
 from config import config
 
@@ -46,7 +46,7 @@ class Net(torch.nn.Module):
         scalers = ['identity', 'amplification', 'attenuation']
         max_degree = 4
 
-        deg=deg1()
+        deg = generate_deg()
         # print("A=", A)
         # with open(config.main_path + 'data/smiles.txt') as f:
         #     smiles = f.readlines()[:]
@@ -171,19 +171,19 @@ def atom_feature(f1, atom_i, atomic, val):
 
 
 def prepare_io_data(Y):
-    data_save_path = config.main_path + "data1/{0}/{0}_data.pkl".format(config.dataset)
+    data_save_path = config.main_path + "data/{0}/{0}_data.pkl".format(config.dataset)
     if os.path.exists(data_save_path):
         with open(data_save_path, "rb") as f:
             dic = pickle.load(f)
         print("load data_dic from {}".format(data_save_path))
     else:
         dic = dict()
-        with open(config.main_path + 'data1/{}/ATOMIC_NUMBERS'.format(config.dataset)) as f:
+        with open(config.main_path + 'data/{}/ATOMIC_NUMBERS'.format(config.dataset)) as f:
             atomic = f.readlines()
             atomic = [a.strip() for a in atomic]
             # atomic = [a for a in atomic[0:126]]
 
-        with open(config.main_path + 'data1/{}/VALENCE_ELECTRONS'.format(config.dataset)) as f:
+        with open(config.main_path + 'data/{}/VALENCE_ELECTRONS'.format(config.dataset)) as f:
             val = f.readlines()
             val = [v.strip() for v in val]
             # val = [v for v in val[0:126]]
@@ -324,12 +324,12 @@ def prepare_io_data(Y):
     return dic
 
 
-def deg1():
+def generate_deg():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # device = "cpu"
     batch_size = 64
     seed = 0
     num_nodes = 126
-    Y = np.load(config.main_path + "data1/{0}/{0}_gaps.npy".format(config.dataset))
+    Y = np.load(config.main_path + "data/{0}/{0}_gaps.npy".format(config.dataset))
     train_logp = Y[:config.train_length]
     test_logp = Y[config.train_length:]
     train_dataset = MolDataset(train_logp, Y)
