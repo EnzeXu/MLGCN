@@ -6,7 +6,10 @@ from torch_geometric.loader import DataLoader
 
 from config import config
 from model import Net, MolDataset
-from utils import worker_init_fn
+from utils1 import worker_init_fn
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  #（保证程序cuda序号与实际cuda序号对应）
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"  #（代表仅使用第0，1号GPU）
 
 
 def run():
@@ -22,7 +25,8 @@ def run():
     print("initial_lr: {0:06f}".format(initial_lr))
     print("random_seed: {}".format(seed))
 
-    Y = np.load(config.main_path + "data/{0}/{0}_gaps.npy".format(config.dataset))
+    Y = np.load(config.main_path + "data1/{0}/{0}_gaps.npy".format(config.dataset))
+    #print(Y)
     model = Net(device, seed).to(device)
     model.train()
     # summary(model,[(32,126,28),(32,126,126)])
@@ -88,9 +92,12 @@ def run():
             edge_attr: torch.Size([64, 1, 450])
             """
             edge_index = edge_index.reshape(2, -1)  # edge_index = edge_index.reshape(2,1800)
+            #batch=torch.
             pred = model(x, edge_index, edge_attr, batch=None).squeeze(-1)
-            # print("pred:", pred.shape)
-            pred = pred.repeat(y.shape[0])
+            #print(pred.shape)
+            print("pred:", pred.shape)
+            print("y_true",y.shape)
+            #pred = pred.repeat(y.shape[0])
             # a=abs(pred.data.cpu().numpy()-y.data.cpu().numpy())
             # a=np.min(a)
             # print(a)

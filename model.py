@@ -15,6 +15,7 @@ from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.nn import ChebConv, GCNConv  # noqa
 from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 from torch.backends import cudnn
+from utils1 import worker_init_fn
 
 from config import config
 
@@ -30,7 +31,6 @@ class MolDataset(Dataset):
     def __getitem__(self, idx):
         return self.dic[idx]
 
-
 class Net(torch.nn.Module):
     def __init__(self, device, seed=None):
         super(Net, self).__init__()
@@ -45,12 +45,21 @@ class Net(torch.nn.Module):
         aggregators = ['mean', 'min', 'max', 'std']
         scalers = ['identity', 'amplification', 'attenuation']
         max_degree = 4
+
+        deg=deg1()
         # print("A=", A)
         # with open(config.main_path + 'data/smiles.txt') as f:
         #     smiles = f.readlines()[:]
         #     # print(smiles[0])
         # smiles = [s.strip() for s in smiles]
-        A = np.load(config.main_path + 'data/A.npy')
+        #max_degree = 4
+        # print("A=", A)
+        # with open(config.main_path + 'data/smiles.txt') as f:
+        #     smiles = f.readlines()[:]
+        #     # print(smiles[0])
+        # smiles = [s.strip() for s in smiles]
+        '''
+        A = np.load(config.main_path + 'data1/A.npy')
 
         adj = sp.coo_matrix(A)
         # print("adj=", adj)
@@ -61,6 +70,7 @@ class Net(torch.nn.Module):
         d = degree(edge_index[1], num_nodes=126, dtype=torch.long)
         # print(edge_index)
         deg += torch.bincount(d, minlength=deg.numel())
+        '''
 
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
@@ -85,11 +95,14 @@ class Net(torch.nn.Module):
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
-        # print("cp 1 x:", x.shape)
+
+        print("cp 1 x:", x.shape)
+        x= x.reshape(-1,126,126)
         x = global_add_pool(x, batch)
-        # print("cp 2 x:", x.shape)
+        print("cp 2 x:", x.shape)
+        x =x.reshape(-1,126)
         res = self.mlp(x)
-        # print("cp 3 res:", res.shape)
+        print("cp 3 res:", res.shape)
         return res
 
     @staticmethod
@@ -158,19 +171,19 @@ def atom_feature(f1, atom_i, atomic, val):
 
 
 def prepare_io_data(Y):
-    data_save_path = config.main_path + "data/{0}/{0}_data.pkl".format(config.dataset)
+    data_save_path = config.main_path + "data1/{0}/{0}_data.pkl".format(config.dataset)
     if os.path.exists(data_save_path):
         with open(data_save_path, "rb") as f:
             dic = pickle.load(f)
         print("load data_dic from {}".format(data_save_path))
     else:
         dic = dict()
-        with open(config.main_path + 'data/{}/ATOMIC_NUMBERS'.format(config.dataset)) as f:
+        with open(config.main_path + 'data1/{}/ATOMIC_NUMBERS'.format(config.dataset)) as f:
             atomic = f.readlines()
             atomic = [a.strip() for a in atomic]
             # atomic = [a for a in atomic[0:126]]
 
-        with open(config.main_path + 'data/{}/VALENCE_ELECTRONS'.format(config.dataset)) as f:
+        with open(config.main_path + 'data1/{}/VALENCE_ELECTRONS'.format(config.dataset)) as f:
             val = f.readlines()
             val = [v.strip() for v in val]
             # val = [v for v in val[0:126]]
@@ -311,5 +324,36 @@ def prepare_io_data(Y):
     return dic
 
 
+def deg1():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # device = "cpu"
+    batch_size = 64
+    seed = 0
+    num_nodes = 126
+    Y = np.load(config.main_path + "data1/{0}/{0}_gaps.npy".format(config.dataset))
+    train_logp = Y[:config.train_length]
+    test_logp = Y[config.train_length:]
+    train_dataset = MolDataset(train_logp, Y)
+    test_dataset = MolDataset(test_logp, Y)
+    g = torch.Generator()
+    g.manual_seed(seed)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=2,
+                                  worker_init_fn=worker_init_fn,
+                                  generator=g)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=2,
+                                 worker_init_fn=worker_init_fn,
+                                 generator=g)
+    max_degree = -1
+    for i_batch, batch in enumerate(train_dataloader):
+        edge_index = \
+            batch['EI'].long().to(device)
+        d = degree(edge_index[0][1], num_nodes=num_nodes, dtype=torch.long)
+        max_degree = max(max_degree, int(d.max()))
+    deg = torch.zeros(max_degree + 1, dtype=torch.long)
+    for i_batch, batch in enumerate(train_dataloader):
+        edge_index = \
+            batch['EI'].long().to(device)
+        d = degree(edge_index[0][1], num_nodes=num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    return deg
 
 
