@@ -116,7 +116,7 @@ def run():
     print("figure_regression_test_path: {}".format(figure_regression_test_path))
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: 1 / (epoch / 10.0 + 1))  # decade
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda ep: 1 / (ep / 100.0 + 1))  # decade
 
     print("Training...")
     epoch_loss_list = []

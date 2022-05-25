@@ -59,8 +59,10 @@ class Net(torch.nn.Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(126))
 
-        self.mlp = Sequential(Linear(126, 100), ReLU(), Linear(100, 50), ReLU(),
-                              Linear(50, 25), ReLU(), Linear(25, 1))
+        # self.mlp = Sequential(Linear(126, 100), ReLU(), Linear(100, 50), ReLU(),
+        #                       Linear(50, 25), ReLU(), Linear(25, 1))
+        self.mlp = Sequential(Linear(126, 100), ReLU(), Linear(100, 100), ReLU(),
+                              Linear(100, 100), ReLU(), Linear(100, 1))
 
     def forward(self, x, edge_index, edge_attr, batch):
         # x = self.node_emb(x.squeeze())
