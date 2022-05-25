@@ -8,6 +8,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from typing import Optional
 from torch import Tensor
+from torch.autograd import Variable
 from torch_scatter import scatter
 
 
@@ -45,8 +46,19 @@ def worker_init_fn(worker_id, seed=0):
     random.seed(seed + worker_id)
 
 
+# def func_loss3(x):
+#     device = x.device
+#     res = 1e-4 * (scipy.special.lambertw(1e2 * math.e ** (1e2 - 1e4 * x.cpu().detach().numpy())).real + 1e4 * x.cpu().detach().numpy() - 1e2)
+#     res = Variable(torch.Tensor(res), requires_grad=True).to(device)
+#     # print(res.shape)
+#     return res
+
 def func_loss3(x):
-    return 1e-4 * (scipy.special.lambertw(1e2 * math.e ** (1e2 - 1e4 * x)).real + 1e4 * x - 1e2)
+    # print(x)
+    device = x.device
+    res = x + (1 - torch.ones(x.shape[0]).to(device) * torch.gt(x, 0.01).to(device)) * (1e-9 - x)
+    # print(res)
+    return res
 
 
 def loss_function(pred, true, loss_type, loss_id):
@@ -59,14 +71,20 @@ def loss_function(pred, true, loss_type, loss_id):
         elif loss_id == 2:
             loss = criterion(pred, torch.round(true, decimals=2))
         elif loss_id == 3:
-            loss = criterion(func_loss3(np.abs(pred - true)))
+            device = pred.device
+            res = func_loss3(torch.abs(pred - true))
+            zeros_1D = torch.Tensor([0.0] * res.shape[0]).to(device)
+            loss = criterion(res, zeros_1D)
     elif loss_type == "test":
         if loss_id == 1:
             loss = criterion(pred, true)
         elif loss_id == 2:
             loss = criterion(torch.round(pred, decimals=2), torch.round(true, decimals=2))
         elif loss_id == 3:
-            loss = criterion(func_loss3(np.abs(pred - true)))
+            device = pred.device
+            res = func_loss3(torch.abs(pred - true))
+            zeros_1D = torch.Tensor([0.0] * res.shape[0]).to(device)
+            loss = criterion(res, zeros_1D)
     return loss
 
 
@@ -242,7 +260,10 @@ if __name__ == "__main__":
     # length = 1600
     # generate_gap_file("data/{}/EIGENVALS".format(dataset), "data/{}/{}_gaps.npy".format(dataset, dataset), length, "EIGENVAL_{}")
     # generate_gap_file("data/{}/EIGENVALS".format(dataset), "data/{}/{}_gaps.npy".format(dataset, dataset), length, "EIGENVAL_BETA_{}")
-    # print(func_loss3(0.005))
+    a = torch.Tensor([2,3,4])
+    b = torch.Tensor([2.011, 3.009,4.011])
+    # print(a + (1 - torch.ones(len(a)) * torch.gt(a, 0.01)) * (1e-1 - a))
+    print(loss_function(a, b, "train", 3))
     # draw_two_dimension_regression(
     #     x_lists=[[2.3, 2.4, 2.6, 2.5, 2.8]],
     #     y_lists=[[2.26, 2.41, 2.56, 2.52, 2.81]],
@@ -259,4 +280,4 @@ if __name__ == "__main__":
     # )
     # pass
 
-    print(compute_correlation([2.3, 2.4, 2.6, 2.5, 2.4], [2.26, 2.41, 2.56, 2.52, 2.81]))
+    # print(compute_correlation([2.3, 2.4, 2.6, 2.5, 2.4], [2.26, 2.41, 2.56, 2.52, 2.81]))
