@@ -11,19 +11,20 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import Embedding, Linear, ModuleList, ReLU, Sequential
 from torch_geometric.utils import degree
-from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
+from torch_geometric.nn import BatchNorm, PNAConv
 from torch_geometric.nn import ChebConv, GCNConv  # noqa
 from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 from torch.backends import cudnn
-from utils import worker_init_fn
+from utils import worker_init_fn, my_global_add_pool
 
-from config import config
+# from config import config
 
 
 class MolDataset(Dataset):
-    def __init__(self, properties, Y):
+    def __init__(self, properties, Y, args):
         self.properties = properties
-        self.dic = prepare_io_data(Y)
+        self.args = args
+        self.dic = prepare_io_data(Y, self.args)
 
     def __len__(self):
         return len(self.properties)
@@ -31,46 +32,22 @@ class MolDataset(Dataset):
     def __getitem__(self, idx):
         return self.dic[idx]
 
+
 class Net(torch.nn.Module):
-    def __init__(self, device, seed=None):
+    def __init__(self, args):
         super(Net, self).__init__()
-        self.seed = seed if seed else 0
-        self.setup_seed(self.seed)
+        self.args = args
+        self.setup_seed(self.args.seed)
         # self.node_emb = Embedding(21, 75)
         self.edg_emb = Embedding(10, 50)
         self.embedding1 = nn.Linear(5, 126)
         # self.embedding2= nn.Linear(450,126)
-        self.device = device
 
         aggregators = ['mean', 'min', 'max', 'std']
         scalers = ['identity', 'amplification', 'attenuation']
         max_degree = 4
 
-        deg = generate_deg()
-        # print("A=", A)
-        # with open(config.main_path + 'data/smiles.txt') as f:
-        #     smiles = f.readlines()[:]
-        #     # print(smiles[0])
-        # smiles = [s.strip() for s in smiles]
-        #max_degree = 4
-        # print("A=", A)
-        # with open(config.main_path + 'data/smiles.txt') as f:
-        #     smiles = f.readlines()[:]
-        #     # print(smiles[0])
-        # smiles = [s.strip() for s in smiles]
-        '''
-        A = np.load(config.main_path + 'data1/A.npy')
-
-        adj = sp.coo_matrix(A)
-        # print("adj=", adj)
-        values = adj.data
-        indices = np.vstack((adj.row, adj.col))
-        edge_index = torch.LongTensor(indices)
-        deg = torch.zeros(max_degree + 1, dtype=torch.long)
-        d = degree(edge_index[1], num_nodes=126, dtype=torch.long)
-        # print(edge_index)
-        deg += torch.bincount(d, minlength=deg.numel())
-        '''
+        deg = generate_deg(self.args)
 
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
@@ -96,13 +73,13 @@ class Net(torch.nn.Module):
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
 
-        print("cp 1 x:", x.shape)
-        x= x.reshape(-1,126,126)
-        x = global_add_pool(x, batch)
-        print("cp 2 x:", x.shape)
-        x =x.reshape(-1,126)
+        # print("cp 1 x:", x.shape)
+        x = x.reshape(-1,126,126)
+        x = my_global_add_pool(x, batch)
+        # print("cp 2 x:", x.shape)
+        x = x.reshape(-1, 126)
         res = self.mlp(x)
-        print("cp 3 res:", res.shape)
+        # print("cp 3 res:", res.shape)
         return res
 
     @staticmethod
@@ -170,7 +147,7 @@ def atom_feature(f1, atom_i, atomic, val):
     return x_y_z
 
 
-def prepare_io_data(Y):
+def prepare_io_data(Y, config):
     data_save_path = config.main_path + "data/{0}/{0}_data.pkl".format(config.dataset)
     if os.path.exists(data_save_path):
         with open(data_save_path, "rb") as f:
@@ -324,36 +301,39 @@ def prepare_io_data(Y):
     return dic
 
 
-def generate_deg():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # device = "cpu"
+def generate_deg(config):
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # device = "cpu"
     batch_size = 64
     seed = 0
     num_nodes = 126
     Y = np.load(config.main_path + "data/{0}/{0}_gaps.npy".format(config.dataset))
     train_logp = Y[:config.train_length]
     test_logp = Y[config.train_length:]
-    train_dataset = MolDataset(train_logp, Y)
-    test_dataset = MolDataset(test_logp, Y)
+    train_dataset = MolDataset(train_logp, Y, config)
+    # test_dataset = MolDataset(test_logp, Y, config)
     g = torch.Generator()
     g.manual_seed(seed)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=2,
                                   worker_init_fn=worker_init_fn,
                                   generator=g)
-    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=2,
-                                 worker_init_fn=worker_init_fn,
-                                 generator=g)
+    # test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=2,
+    #                              worker_init_fn=worker_init_fn,
+    #                              generator=g)
     max_degree = -1
     for i_batch, batch in enumerate(train_dataloader):
         edge_index = \
-            batch['EI'].long().to(device)
+            batch['EI'].long().to(config.device)
         d = degree(edge_index[0][1], num_nodes=num_nodes, dtype=torch.long)
         max_degree = max(max_degree, int(d.max()))
-    deg = torch.zeros(max_degree + 1, dtype=torch.long)
+    deg = torch.zeros(max_degree + 1, dtype=torch.long).to(config.device)
     for i_batch, batch in enumerate(train_dataloader):
         edge_index = \
-            batch['EI'].long().to(device)
+            batch['EI'].long().to(config.device)
         d = degree(edge_index[0][1], num_nodes=num_nodes, dtype=torch.long)
-        deg += torch.bincount(d, minlength=deg.numel())
+        add_part = torch.bincount(d, minlength=deg.numel()).to(config.device)
+        # print("add_part:", add_part.device)
+        # print("deg:", deg.device)
+        deg += add_part
     return deg
 
 
